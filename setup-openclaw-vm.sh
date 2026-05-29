@@ -4,12 +4,12 @@
 #
 # Turns a fresh GCP project into "the OpenClaw box": a Debian 12 VM with an
 # XFCE desktop reachable through the browser (Chrome Remote Desktop), Node 22+,
-# Google Chrome, and OpenClaw installed (NOT onboarded). No specific agent
-# (Kowalski, etc.) is installed — plugins are a separate per-agent step and are
-# explicitly OUT OF SCOPE here.
+# Google Chrome, OpenClaw installed (NOT onboarded), and VM plugin installer
+# shell scripts downloaded. No specific agent (Kowalski, etc.) is installed —
+# plugins are a separate per-agent step and are explicitly OUT OF SCOPE here.
 #
 # Architecture note: this script runs on the OPERATOR'S LAPTOP. Phase 1 creates
-# the VM with gcloud; phases 2-4 run on the VM over `gcloud compute ssh`. We do
+# the VM with gcloud; phases 2-5 run on the VM over `gcloud compute ssh`. We do
 # NOT install from inside the CRD desktop, because OS Login passwordless sudo is
 # reliable over gcloud SSH but may prompt for an absent password inside CRD.
 #
@@ -45,6 +45,8 @@ BOOT_DISK_TYPE="pd-balanced"
 # is left to the operator and is intentionally NOT run by this script.
 
 NODE_MAJOR="22"               # OpenClaw needs >= 22.14. Node 20 will not work.
+PLUGIN_INSTALLER_REPO="https://github.com/krishnakem/VM-Plugin-Installer-Script.git"
+PLUGIN_INSTALLER_DIR="vm-plugin-installer-scripts"
 
 # Shared system libraries that any Chromium-based browser dynamically links
 # against to launch. These are generic Chromium runtime deps (NOT Playwright).
@@ -135,7 +137,7 @@ remote_run_tty() {
 # =========================================================================== #
 # PHASE 1 — Initialize the VM
 # =========================================================================== #
-log "Phase 1/4 — Creating the VM"
+log "Phase 1/5 — Creating the VM"
 
 gcloud services enable compute.googleapis.com "${GCLOUD_COMMON[@]/--zone=$ZONE/}" \
   ${PROJECT:+--project="$PROJECT"} --quiet 2>/dev/null || true
@@ -165,9 +167,9 @@ info "SSH is up."
 # =========================================================================== #
 # PHASE 2 — Desktop (XFCE) + Chrome Remote Desktop + Chromium runtime libs
 # =========================================================================== #
-log "Phase 2/4 — Installing XFCE desktop, Chrome Remote Desktop, and Chromium runtime libs"
+log "Phase 2/5 — Installing XFCE desktop, Chrome Remote Desktop, and Chromium runtime libs"
 
-PH2="$(mktemp)"; trap 'rm -f "${PH2:-}" "${PH3:-}" "${PH4:-}" 2>/dev/null || true' EXIT
+PH2="$(mktemp)"; trap 'rm -f "${PH2:-}" "${PH3:-}" "${PH4:-}" "${PH5:-}" 2>/dev/null || true' EXIT
 cat > "$PH2" <<PHASE2
 #!/usr/bin/env bash
 set -euo pipefail
@@ -248,7 +250,7 @@ info "CRD enrolled."
 # =========================================================================== #
 # PHASE 3 — Node 22+, Google Chrome, base build tools
 # =========================================================================== #
-log "Phase 3/4 — Installing Node ${NODE_MAJOR}.x, Google Chrome, and base tools"
+log "Phase 3/5 — Installing Node ${NODE_MAJOR}.x, Google Chrome, and base tools"
 
 PH3="$(mktemp)"
 cat > "$PH3" <<PHASE3
@@ -285,12 +287,52 @@ PHASE3
 remote_run_script "$PH3" "openclaw-phase3.sh"
 
 # =========================================================================== #
-# PHASE 4 — Install OpenClaw (onboarding left to the operator)
+# PHASE 4 — Download VM plugin installer scripts
 # =========================================================================== #
-log "Phase 4/4 — Installing OpenClaw"
+log "Phase 4/5 — Downloading VM plugin installer scripts"
 
 PH4="$(mktemp)"
-cat > "$PH4" <<'PHASE4'
+cat > "$PH4" <<PHASE4
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_url="${PLUGIN_INSTALLER_REPO}"
+dest_dir="\$HOME/${PLUGIN_INSTALLER_DIR}"
+tmp_dir="\$(mktemp -d)"
+trap 'rm -rf "\$tmp_dir"' EXIT
+
+git clone --depth=1 "\$repo_url" "\$tmp_dir/repo"
+
+rm -rf "\$dest_dir"
+mkdir -p "\$dest_dir"
+
+found=0
+while IFS= read -r -d '' script_path; do
+  rel_path="\${script_path#\$tmp_dir/repo/}"
+  mkdir -p "\$dest_dir/\$(dirname "\$rel_path")"
+  cp "\$script_path" "\$dest_dir/\$rel_path"
+  chmod +x "\$dest_dir/\$rel_path"
+  found=1
+done < <(find "\$tmp_dir/repo" -type f -name '*.sh' -print0)
+
+if [[ "\$found" -eq 0 ]]; then
+  echo "No .sh files found in \$repo_url." >&2
+  exit 1
+fi
+
+echo "Downloaded shell scripts to \$dest_dir:"
+find "\$dest_dir" -type f -name '*.sh' -print | sort
+echo "Phase 4 OK."
+PHASE4
+remote_run_script "$PH4" "openclaw-phase4.sh"
+
+# =========================================================================== #
+# PHASE 5 — Install OpenClaw (onboarding left to the operator)
+# =========================================================================== #
+log "Phase 5/5 — Installing OpenClaw"
+
+PH5="$(mktemp)"
+cat > "$PH5" <<'PHASE5'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -302,9 +344,9 @@ if ! command -v openclaw >/dev/null 2>&1; then
   exit 1
 fi
 echo "openclaw: $(openclaw --version)"
-echo "Phase 4 (install) OK."
-PHASE4
-remote_run_script "$PH4" "openclaw-phase4.sh"
+echo "Phase 5 (install) OK."
+PHASE5
+remote_run_script "$PH5" "openclaw-phase5.sh"
 
 # OpenClaw onboarding is intentionally NOT run here — the operator runs
 # `openclaw onboard --install-daemon` manually (note: NOT `openclaw configure`).
@@ -330,6 +372,8 @@ cat <<DONE
          configure skills. NOT `openclaw configure`.)
       5. Then the dashboard:
            openclaw dashboard          # opens Chrome at http://127.0.0.1:18789/
+      6. VM plugin installer shell scripts are here:
+           ~/${PLUGIN_INSTALLER_DIR}/
 
     Once onboarded, this box is a blank OpenClaw template. To put an agent in
     it, install a plugin (out of scope here), e.g. Kowalski for an end-to-end

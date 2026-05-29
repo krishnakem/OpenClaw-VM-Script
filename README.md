@@ -12,10 +12,14 @@ The script builds a Debian 12 VM with:
 - Base build tools for native npm modules
 - OpenClaw installed globally
 - Chromium runtime libraries commonly needed by browser-driving agents
+- Shell scripts from
+  [`krishnakem/VM-Plugin-Installer-Script`](https://github.com/krishnakem/VM-Plugin-Installer-Script)
+  downloaded into the VM
 
 OpenClaw is installed but not onboarded. Agent plugins are also intentionally out
-of scope. This repo is meant to create the blank infrastructure layer: the box
-you can later onboard and customize for a specific agent.
+of scope. This repo is meant to create the blank infrastructure layer and stage
+the plugin installer scripts: the box you can later onboard and customize for a
+specific agent.
 
 ## Script
 
@@ -58,12 +62,14 @@ types such as `t2a-*` and `c4a-*` are rejected. Use an x86_64 machine type.
 
 ## What It Does
 
-The setup runs in four phases:
+The setup runs in five phases:
 
 1. Creates or reuses the target GCP VM.
 2. Installs XFCE, Chrome Remote Desktop, and Chromium runtime libraries.
 3. Installs Node.js 22.x, Google Chrome, Git, curl, and build tools.
-4. Installs `openclaw@latest` globally with npm.
+4. Downloads `*.sh` files from `krishnakem/VM-Plugin-Installer-Script` into
+   `~/vm-plugin-installer-scripts/` on the VM and marks them executable.
+5. Installs `openclaw@latest` globally with npm.
 
 If an instance with the requested name already exists in the selected zone, the
 script reuses it and skips VM creation.
@@ -107,6 +113,12 @@ Run onboarding manually:
 
 ```sh
 openclaw onboard --install-daemon
+```
+
+The VM plugin installer shell scripts are available on the VM at:
+
+```sh
+~/vm-plugin-installer-scripts/
 ```
 
 For a reusable template, the script's guidance is to pick the Dashboard/WebChat
