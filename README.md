@@ -69,7 +69,9 @@ The setup runs in five phases:
 3. Installs Node.js 22.x, Google Chrome, Git, curl, and build tools.
 4. Downloads `*.sh` files from `krishnakem/VM-Plugin-Installer-Script` into
    the VM home folder and marks them executable.
-5. Installs `openclaw@latest` globally with npm.
+5. Installs `openclaw@latest` globally with npm and changes
+   `tools.profile=coding` to `tools.profile=full` if it is set, so plugin tools are visible to the
+   agent.
 
 If an instance with the requested name already exists in the selected zone, the
 script reuses it and skips VM creation.

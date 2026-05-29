@@ -348,6 +348,14 @@ if ! command -v openclaw >/dev/null 2>&1; then
   exit 1
 fi
 echo "openclaw: $(openclaw --version)"
+
+# The "coding" tools profile hides plugin/capability tools from the agent.
+# Use the full tools profile so downloaded plugin installer scripts can expose tools.
+if openclaw config get tools 2>/dev/null | grep -q '"profile"[[:space:]]*:[[:space:]]*"coding"'; then
+  echo "setting tools.profile=full (coding hides plugin tools from the agent)"
+  openclaw config set tools.profile full
+fi
+
 echo "Phase 5 (install) OK."
 PHASE5
 remote_run_script "$PH5" "openclaw-phase5.sh"
