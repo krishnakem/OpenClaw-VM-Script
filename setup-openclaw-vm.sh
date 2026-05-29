@@ -46,7 +46,6 @@ BOOT_DISK_TYPE="pd-balanced"
 
 NODE_MAJOR="22"               # OpenClaw needs >= 22.14. Node 20 will not work.
 PLUGIN_INSTALLER_REPO="https://github.com/krishnakem/VM-Plugin-Installer-Script.git"
-PLUGIN_INSTALLER_DIR="vm-plugin-installer-scripts"
 
 # Shared system libraries that any Chromium-based browser dynamically links
 # against to launch. These are generic Chromium runtime deps (NOT Playwright).
@@ -306,21 +305,17 @@ cat > "$PH4" <<PHASE4
 set -euo pipefail
 
 repo_url="${PLUGIN_INSTALLER_REPO}"
-dest_dir="\$HOME/${PLUGIN_INSTALLER_DIR}"
+dest_dir="\$HOME"
 tmp_dir="\$(mktemp -d)"
 trap 'rm -rf "\$tmp_dir"' EXIT
 
 git clone --depth=1 "\$repo_url" "\$tmp_dir/repo"
 
-rm -rf "\$dest_dir"
-mkdir -p "\$dest_dir"
-
 found=0
 while IFS= read -r -d '' script_path; do
-  rel_path="\${script_path#\$tmp_dir/repo/}"
-  mkdir -p "\$dest_dir/\$(dirname "\$rel_path")"
-  cp "\$script_path" "\$dest_dir/\$rel_path"
-  chmod +x "\$dest_dir/\$rel_path"
+  script_name="\$(basename "\$script_path")"
+  cp "\$script_path" "\$dest_dir/\$script_name"
+  chmod +x "\$dest_dir/\$script_name"
   found=1
 done < <(find "\$tmp_dir/repo" -type f -name '*.sh' -print0)
 
@@ -330,7 +325,7 @@ if [[ "\$found" -eq 0 ]]; then
 fi
 
 echo "Downloaded shell scripts to \$dest_dir:"
-find "\$dest_dir" -type f -name '*.sh' -print | sort
+find "\$dest_dir" -maxdepth 1 -type f -name '*.sh' -print | sort
 echo "Phase 4 OK."
 PHASE4
 remote_run_script "$PH4" "openclaw-phase4.sh"
@@ -381,8 +376,9 @@ cat <<DONE
          configure skills. NOT \`openclaw configure\`.)
       5. Then the dashboard:
            openclaw dashboard          # opens Chrome at http://127.0.0.1:18789/
-      6. VM plugin installer shell scripts are here:
-           ~/${PLUGIN_INSTALLER_DIR}/
+      6. VM plugin installer shell scripts are in your VM home folder:
+           ~/getplugin.sh
+           ~/reinstall.sh
 
     Once onboarded, this box is a blank OpenClaw template. To put an agent in
     it, install a plugin (out of scope here), e.g. Kowalski for an end-to-end

@@ -68,7 +68,7 @@ The setup runs in five phases:
 2. Installs XFCE, Chrome Remote Desktop, and Chromium runtime libraries.
 3. Installs Node.js 22.x, Google Chrome, Git, curl, and build tools.
 4. Downloads `*.sh` files from `krishnakem/VM-Plugin-Installer-Script` into
-   `~/vm-plugin-installer-scripts/` on the VM and marks them executable.
+   the VM home folder and marks them executable.
 5. Installs `openclaw@latest` globally with npm.
 
 If an instance with the requested name already exists in the selected zone, the
@@ -118,7 +118,8 @@ openclaw onboard --install-daemon
 The VM plugin installer shell scripts are available on the VM at:
 
 ```sh
-~/vm-plugin-installer-scripts/
+~/getplugin.sh
+~/reinstall.sh
 ```
 
 For a reusable template, the script's guidance is to pick the Dashboard/WebChat
