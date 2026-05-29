@@ -176,6 +176,15 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 sudo apt-get update
+
+# The XFCE dependency chain can pull in keyboard-configuration, which prompts
+# even in some noninteractive remote shells unless its values are preseeded.
+printf '%s\n' \
+  'keyboard-configuration keyboard-configuration/layoutcode string us' \
+  'keyboard-configuration keyboard-configuration/modelcode string pc105' \
+  'keyboard-configuration keyboard-configuration/variantcode string' \
+  'keyboard-configuration keyboard-configuration/optionscode string' \
+  | sudo debconf-set-selections
 sudo apt-get install -y xfce4 xfce4-goodies xscreensaver desktop-base dbus-x11
 
 # Chrome Remote Desktop apt source + signing key (--yes so re-runs can overwrite)
@@ -369,7 +378,7 @@ cat <<DONE
       4. Run onboarding manually:
            openclaw onboard --install-daemon
          (For a template: pick the Dashboard / WebChat channel, and "Yes" to
-         configure skills. NOT `openclaw configure`.)
+         configure skills. NOT \`openclaw configure\`.)
       5. Then the dashboard:
            openclaw dashboard          # opens Chrome at http://127.0.0.1:18789/
       6. VM plugin installer shell scripts are here:
