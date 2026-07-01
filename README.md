@@ -1,170 +1,64 @@
-# OpenClaw GCP Agent VM Template
+# OpenClaw Agent VM - one-command GCP provisioner
 
-This repository contains a single provisioning script for creating a reusable
-Google Cloud VM template for running OpenClaw-based agents.
+**Turn a fresh GCP project into a browser-capable "agent box" with a single script.** Debian 12, XFCE reachable in the browser, Node 22, Chrome, and OpenClaw installed - the blank infrastructure layer I spin up every time I need to test an agent somewhere that isn't my laptop.
 
-The script builds a Debian 12 VM with:
-
-- XFCE desktop environment
-- Chrome Remote Desktop browser access
-- Google Chrome
-- Node.js 22.x
-- Base build tools for native npm modules
-- OpenClaw installed globally
-- Chromium runtime libraries commonly needed by browser-driving agents
-- Shell scripts from
-  [`krishnakem/VM-Plugin-Installer-Script`](https://github.com/krishnakem/VM-Plugin-Installer-Script)
-  downloaded into the VM
-
-OpenClaw is installed but not onboarded. Agent plugins are also intentionally out
-of scope. This repo is meant to create the blank infrastructure layer and stage
-the plugin installer scripts: the box you can later onboard and customize for a
-specific agent.
-
-## Script
-
-```sh
-./setup-openclaw-vm.sh
+```bash
+./setup-openclaw-vm.sh                       # sane defaults, one command
+./setup-openclaw-vm.sh --name my-vm --zone us-west1-a --project my-gcp-project
 ```
 
-Defaults:
+---
 
-- VM name: `experiment-claw`
-- Zone: `us-west1-a`
-- Machine type: `e2-standard-2`
-- Image: Debian 12 from `debian-cloud`
-- Boot disk: `30GB` `pd-balanced`
+## Why this exists
 
-You can override the main VM settings:
+Every agent I build (Kowalski, Silicon Sandbox) eventually needs to run on a real machine with a real desktop and a real browser - not my laptop, which I want back. Standing that box up by hand is ~30 minutes of fiddly `apt`, Node version pain, and Chromium `.so` hunting. This script makes it repeatable and disposable: provision, test, tear down, repeat.
 
-```sh
-./setup-openclaw-vm.sh \
-  --name my-openclaw-vm \
-  --zone us-west1-a \
-  --machine-type e2-standard-2 \
-  --project my-gcp-project
-```
+It builds the **infrastructure layer only**. OpenClaw is installed but *not* onboarded, and no specific agent plugin is installed - those are deliberate per-agent steps handled separately (see [VM-Plugin-Installer-Script](https://github.com/krishnakem/VM-Plugin-Installer-Script)). The output is a clean box you can onboard and specialize.
+
+## What the box gets
+
+- XFCE desktop + **Chrome Remote Desktop** (browser-based access, no SSH tunnel juggling)
+- Google Chrome + the full set of Chromium runtime libraries browser-driving agents need
+- Node.js 22.x (OpenClaw needs >= 22.14 - Node 20 will not work)
+- Git, curl, build tools for native npm modules
+- `openclaw@latest` installed globally, with `tools.profile` flipped `coding -> full` so plugin tools are visible to the agent
+- The VM plugin-installer scripts staged in the home folder, ready to pull agents in
+
+## How it runs
+
+The script runs on **your laptop**, not inside the VM. Phase 1 creates the instance with `gcloud`; phases 2-5 install software over `gcloud compute ssh`/`scp` (chosen deliberately - OS Login passwordless sudo is reliable over gcloud SSH but can prompt for an absent password inside the CRD desktop).
+
+1. Create or reuse the target VM
+2. Install XFCE, Chrome Remote Desktop, Chromium runtime libs
+3. Install Node 22, Chrome, Git, curl, build tools
+4. Download the plugin-installer `*.sh` scripts into the VM
+5. Install OpenClaw globally and set `tools.profile=full`
+
+If a VM with the requested name already exists in the zone, it's reused and creation is skipped.
+
+## Defaults
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| Name | `experiment-claw` | |
+| Zone | `us-west1-a` | Oregon |
+| Machine type | `e2-standard-2` | 2 vCPU / 8 GB - `e2-medium` (4 GB) crashes Chromium |
+| Image | Debian 12 (`debian-cloud`) | amd64 |
+| Boot disk | 30 GB `pd-balanced` | 10 GB fills up fast (Chromium + node_modules + apt + DE) |
+
+**x86_64 only.** Chrome Remote Desktop ships no ARM Debian package, so ARM types (`t2a-*`, `c4a-*`) are rejected up front.
 
 ## Prerequisites
 
-Install and authenticate the Google Cloud CLI on your local machine:
-
-```sh
+```bash
 gcloud auth login
 gcloud config set project <project-id>
 ```
 
-The script runs from your local machine. It creates the VM with `gcloud`, then
-uses `gcloud compute ssh` and `gcloud compute scp` to install software on the VM.
+## The one manual step
 
-Chrome Remote Desktop does not provide an ARM Debian package, so ARM machine
-types such as `t2a-*` and `c4a-*` are rejected. Use an x86_64 machine type.
+CRD enrollment needs a human: you paste a `start-host --code="..."` command from [remotedesktop.google.com/headless](https://remotedesktop.google.com/headless) (Google won't mint that code for a script). The script prints a checklist at the end covering this and `openclaw onboard --install-daemon`.
 
-## What It Does
+## License
 
-The setup runs in five phases:
-
-1. Creates or reuses the target GCP VM.
-2. Installs XFCE, Chrome Remote Desktop, and Chromium runtime libraries.
-3. Installs Node.js 22.x, Google Chrome, Git, curl, and build tools.
-4. Downloads `*.sh` files from `krishnakem/VM-Plugin-Installer-Script` into
-   the VM home folder and marks them executable.
-5. Installs `openclaw@latest` globally with npm and changes
-   `tools.profile=coding` to `tools.profile=full` if it is set, so plugin tools are visible to the
-   agent.
-
-If an instance with the requested name already exists in the selected zone, the
-script reuses it and skips VM creation.
-
-## Manual Step: Chrome Remote Desktop
-
-During setup, the script pauses for Chrome Remote Desktop enrollment.
-
-Open this page on your local machine:
-
-```text
-https://remotedesktop.google.com/headless
-```
-
-Follow the prompts, authorize access, and copy the full `start-host` command.
-Paste that command back into the script when prompted. You will also set a PIN
-that you will use later to connect to the desktop.
-
-If you are signed into multiple Google accounts in the same browser, the
-enrollment flow can bind the code to the wrong account. Use the correct account
-in the account picker or sign out of the extra accounts before generating the
-command.
-
-## After Setup
-
-When the script completes, OpenClaw is installed but still needs onboarding.
-
-SSH into the VM:
-
-```sh
-gcloud compute ssh experiment-claw --zone us-west1-a
-```
-
-Confirm OpenClaw is installed:
-
-```sh
-openclaw --version
-```
-
-Run onboarding manually:
-
-```sh
-openclaw onboard --install-daemon
-```
-
-The VM plugin installer shell scripts are available on the VM at:
-
-```sh
-~/getplugin.sh
-~/reinstall.sh
-```
-
-For a reusable template, the script's guidance is to pick the Dashboard/WebChat
-channel and configure skills when prompted.
-
-Then launch the dashboard:
-
-```sh
-openclaw dashboard
-```
-
-The dashboard opens at:
-
-```text
-http://127.0.0.1:18789/
-```
-
-You can access the VM desktop from:
-
-```text
-https://remotedesktop.google.com/access
-```
-
-## Adding Agents
-
-This repository does not install a specific agent. After the VM is provisioned
-and OpenClaw is onboarded, install the relevant OpenClaw plugin for the agent you
-want to run.
-
-Example:
-
-```sh
-openclaw plugins install <plugin-repo>
-```
-
-## Notes
-
-- `openclaw@latest` is installed explicitly because the bare `openclaw` npm name
-  is not the intended package.
-- Node.js 22.x is required; Node 20 is not sufficient for this setup.
-- The default `e2-standard-2` machine type is chosen because smaller machines can
-  struggle with Chromium and desktop workloads.
-- The default 30 GB boot disk avoids running out of space after installing the
-  desktop environment, Chrome, Node packages, and apt dependencies.
-- If SSH is not reachable in a locked-down VPC, you may need to adapt the script
-  to use IAP tunneling and add the required firewall rule.
+See repository.
